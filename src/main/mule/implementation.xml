@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:secure-properties="http://www.mulesoft.org/schema/mule/secure-properties" xmlns:tls="http://www.mulesoft.org/schema/mule/tls"
+    xmlns:http="http://www.mulesoft.org/schema/mule/http"
+    xmlns:confluent-schema-registry="http://www.mulesoft.org/schema/mule/confluent-schema-registry" xmlns:json="http://www.mulesoft.org/schema/mule/json" xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:json-logger="http://www.mulesoft.org/schema/mule/json-logger" xmlns:kafka="http://www.mulesoft.org/schema/mule/kafka" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/kafka http://www.mulesoft.org/schema/mule/kafka/current/mule-kafka.xsd
+http://www.mulesoft.org/schema/mule/json-logger http://www.mulesoft.org/schema/mule/json-logger/current/mule-json-logger.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd
+http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd
+http://www.mulesoft.org/schema/mule/confluent-schema-registry http://www.mulesoft.org/schema/mule/confluent-schema-registry/current/mule-confluent-schema-registry.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/tls http://www.mulesoft.org/schema/mule/tls/current/mule-tls.xsd
+http://www.mulesoft.org/schema/mule/secure-properties http://www.mulesoft.org/schema/mule/secure-properties/current/mule-secure-properties.xsd">
+    <confluent-schema-registry:config name="Confluent_Schema_Registry_Connector_Config" doc:name="Confluent Schema Registry Connector Config" doc:id="e2052489-df80-4db0-9018-1a769498b5c1" >
+        <confluent-schema-registry:unsecured-connection baseUri="${consumer.schemaRegUrl}"/>
+    </confluent-schema-registry:config>
+	<kafka:consumer-config name="kafka-consumer" doc:name="Apache Kafka Consumer configuration" doc:id="a7b4193a-186e-424a-af16-5d3bba6fd421">
+		<kafka:consumer-plaintext-connection tlsContext="tls-context-consumer" groupId="${consumer.group}" maximumPollingInterval="${consumer.pollInterval}" autoOffsetReset="EARLIEST" recordLimit="${consumer.recordLimit}">
+			<kafka:bootstrap-servers >
+				<kafka:bootstrap-server value="${consumer.bootstrapServer}" />
+			</kafka:bootstrap-servers>
+			<kafka:assignments >
+				<kafka:topic-partition topic="${consumer.topic}" partition="${consumer.partition}" />
+			</kafka:assignments>
+	</kafka:consumer-plaintext-connection>
+	</kafka:consumer-config>
+	<tls:context name="tls-context-consumer" doc:name="TLS Context" doc:id="44ed6e2c-6273-40b3-b177-7f1afc156425" >
+		<tls:trust-store path="${mule.env}-kaas-truststore.jks" password="${secure::consumer.truststore.pass}" type="jks"/>
+		<tls:key-store path="${mule.env}-imd-kaas.keystore.jks" type="jks" keyPassword="${secure::consumer.keystore.pass}" password="${secure::consumer.keystore.pass}"/>
+	</tls:context>
+	<configuration-properties doc:name="environment-config" doc:id="ce4061ca-1ede-4467-a15d-2dd5d1f45e55" file="config-${mule.env}.yaml" />
+	<secure-properties:config name="secure-properties-config" doc:name="Secure Properties Config" doc:id="39ce3a00-f2d8-4f50-9d56-f2a29f08fe58" file="config-secured-${mule.env}.yaml" key="${mule.encryptionKey}"/>
+
+	<flow name="kafka-listener-flow" doc:id="2ed7af06-9ea8-449e-8422-d8c14fb24fd0">
+        <kafka:message-listener doc:name="Message listener" doc:id="f1706d41-1047-4827-a7ad-8747a3464ee2" config-ref="kafka-consumer"/>
+		<flow-ref doc:name="Deserialize" doc:id="58497520-5be0-48b9-8823-acd19653040c" name="deserialize-subflow" />
+	</flow>
+	<flow name="kafka-batch-listener-flow" doc:id="bb28bedc-b5e0-4694-a82d-04ab52b8b876" initialState="stopped">
+		<kafka:batch-message-listener doc:name="Batch message listener" doc:id="db003765-8420-4117-8730-9341d2e5d179" config-ref="kafka-consumer"/>
+		<foreach doc:name="For Each" doc:id="9c966ee5-2427-4c8b-ad27-0bc5d97314a9" >
+			<set-payload value="#[payload.payload]" doc:name="Set Payload" doc:id="ffbcc411-59ff-4174-aac7-bf10e620f676" />
+			<flow-ref doc:name="Deserialize" doc:id="b3952d05-a619-49f7-b785-9f4f1e3ad3a5" name="deserialize-subflow" />
+		</foreach>
+	</flow>
+	<sub-flow name="deserialize-subflow" doc:id="6fc41a0e-8d68-4b11-a660-24c4c0c86504" >
+		<confluent-schema-registry:replace-id-with-avro-schema doc:name="Replace id with AVRO schema" doc:id="233abc06-86b0-4cf1-b042-90faf15772bf" config-ref="Confluent_Schema_Registry_Connector_Config">
+			<reconnect />
+		</confluent-schema-registry:replace-id-with-avro-schema>
+		<set-payload value="#[output application/json --- payload]" doc:name="To JSON" doc:id="09885c07-fd0b-4df7-982a-ffebf48cd165" />
+		<logger level="INFO" doc:name="JSON Payload" doc:id="5b8cadbe-883e-4eb0-b408-1d5aa6691f51" message="#[payload]" />
+	</sub-flow>
+</mule>

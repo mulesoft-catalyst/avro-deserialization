@@ -1,0 +1,5 @@
+consumer:
+  truststore:
+    pass: "![]"
+  keystore:
+    pass: "![]"

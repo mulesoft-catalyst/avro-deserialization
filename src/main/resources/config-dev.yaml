@@ -1,0 +1,13 @@
+consumer:
+  bootstrapServer: ""
+  topic: ""
+  partition: "0"
+  group: ""
+  redelivery:
+    count: "5"
+  reconn:
+    freq: "2000"
+    attempts: "2"
+  pollInterval: "240"
+  recordLimit: "20"
+  schemaRegUrl: ""
